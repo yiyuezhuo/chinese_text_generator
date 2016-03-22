@@ -174,13 +174,10 @@ class Model(object):
         json_string = self.model.to_json()
         open(fname+'.json', 'w').write(json_string)
         self.model.save_weights(fname+'.h5')
-    def sample(self,ds,em,diversity_t=(0.2, 0.5, 1.0),test_len=400):
+    def sample(self,ds,em,text=None,diversity_t=(0.2, 0.5, 1.0),test_len=400):
         maxlen=ds.maxlen
-        chars=ds.chars
-        indices_char=ds.indices_char
-        char_indices=ds.char_indices
-        
-        text=ds.next_text()
+        if text==None:
+            text=ds.next_text()
 
         start_index = random.randint(0, len(text) - maxlen - 1)
         
@@ -188,31 +185,41 @@ class Model(object):
             em.log()
             em.log('----- diversity:', diversity)
     
-            generated = ''
             sentence = text[start_index: start_index + maxlen]
-            generated += sentence
             em.log('----- Generating with seed: "' + sentence + '"')
-            sys.stdout.write(generated)
-    
-            for i in range(test_len):
-                x = np.zeros((1, maxlen, len(chars)))
-                for t, char in enumerate(sentence):
-                    x[0, t, char_indices[char]] = 1.
-    
-                preds = model.predict(x, verbose=0)[0]
-                next_index = sample(preds, diversity)
-                next_char = indices_char[next_index]
-    
-                generated += next_char
-                sentence = sentence[1:] + next_char
-    
-                sys.stdout.write(next_char)
-                sys.stdout.flush()
+            
+            generated=self.generate(sentence,ds,diversity=diversity,test_len=test_len)
                 
             em.log()
             em.log("gemerated")
             em.log(generated)
             em.log()
+    def generate(self,sentence,ds,diversity=0.5,test_len=400):
+        model=self.model        
+        indices_char=ds.indices_char
+        char_indices=ds.char_indices
+        maxlen=ds.maxlen
+        chars=ds.chars
+        
+        generated = sentence
+        sys.stdout.write(generated)
+
+        for i in range(test_len):
+            x = np.zeros((1, maxlen, len(chars)))
+            for t, char in enumerate(sentence):
+                x[0, t, char_indices[char]] = 1.
+
+            preds = model.predict(x, verbose=0)[0]
+            next_index = sample(preds, diversity)
+            next_char = indices_char[next_index]
+
+            generated += next_char
+            sentence = sentence[1:] + next_char
+
+            sys.stdout.write(next_char)
+            sys.stdout.flush()
+        return generated
+    
     def train(self,ds,em,roll=5,batch_size=128,nb_epoch=1,maxiter=30,
               diversity_t=(0.2, 0.5, 1.0),test_len=400):
         model=self.model
@@ -227,7 +234,7 @@ class Model(object):
                 
                 model.fit(X, y, batch_size=batch_size, nb_epoch=nb_epoch)
                 
-                self.sample(ds,em,diversity_t=diversity_t,test_len=test_len)
+                self.sample(ds,em,text=text,diversity_t=diversity_t,test_len=test_len)
                 em.check(model)
 
 em=Extern_Monitor(fname='shana_model')
@@ -237,5 +244,6 @@ model=Model()
 model.build(ds)
 model.load(em.fname)
 
+model.sample(ds,em)
 model.train(ds,em)
 '''
